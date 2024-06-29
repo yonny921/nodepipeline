@@ -1,3 +1,8 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  CloudFormation template for creating a VPC, Application Load Balancer with Auto Scaling Group
+  using Launch Template for Amazon Linux instances with UserData.
+
 AWSTemplateFormatVersion: "2010-09-09"
 Description: AWS CodePipeline for Node Builds
 Parameters:
@@ -21,20 +26,83 @@ Parameters:
   EC2KeyName:
     Type: String
     Description: Existing KeyName for EC2 instance
+
 Resources:
-  InstanceSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
+  MyVPC:
+    Type: AWS::EC2::VPC
     Properties:
-      GroupDescription: Open ports 22 and 80
-      SecurityGroupIngress:
-      - IpProtocol: tcp
-        FromPort: '22'
-        ToPort: '22'
-        CidrIp: 0.0.0.0/0
-      - IpProtocol: tcp
-        FromPort: '80'
-        ToPort: '80'
-        CidrIp: 0.0.0.0/0
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: VPC-LAB
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MyVPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: PublicSubnet1
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MyVPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: PublicSubnet2
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: InternetGateway
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref MyVPC
+      InternetGatewayId: !Ref InternetGateway
+    DependsOn: InternetGateway
+
+  PublicRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref MyVPC
+      Tags:
+        - Key: Name
+          Value: PublicRouteTable1
+    DependsOn: MyVPC
+  
+
+  PublicRoute1ToInternet:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable1
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  Subnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable1
+
+  Subnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable1
 
   EC2InstanceRole:
     Type: "AWS::IAM::Role"
@@ -68,65 +136,119 @@ Resources:
     Properties:
       Roles:
         - !Ref EC2InstanceRole
+    DependsOn: EC2InstanceRole
 
-  EC2LaunchConfiguration:
-    Type: AWS::AutoScaling::LaunchConfiguration
+  WebServerLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
     Properties:
-      IamInstanceProfile: !Ref EC2InstanceProfile
-      InstanceType: t2.micro
-      ImageId: ami-b70554c8
-      LaunchConfigurationName: !Join [ '-' , [ !Ref GitHubRepoName, !Ref GitHubBranch, 'LaunchConfiguration' ] ]
-      SecurityGroups:
-      - Ref: InstanceSecurityGroup
-      UserData:
-        Fn::Base64:
-          !Sub |
-            #!/bin/bash -xe
+      LaunchTemplateName: !Join [ '-' , [ !Ref GitHubRepoName, !Ref GitHubBranch, 'LaunchTemplate' ] ]
+      LaunchTemplateData:
+        InstanceType: t2.micro
+        ImageId: ami-01b799c439fd5516a  # Replace with your desired Amazon Linux AMI ID
+        SecurityGroupIds:
+          - !Ref InstanceSecurityGroup
+        KeyName: webserver
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
             yum -y update
             yum install -y ruby
+            yum install -y wget
             yum install -y aws-cli
-            curl --silent --location https://rpm.nodesource.com/setup_6.x | sudo bash -
-            sudo yum -y install nodejs
-            cd /var
-            mkdir nodeapp
-            cd /home/ec2-user
-            wget https://aws-codedeploy-us-east-1.s3.amazonaws.com/latest/install
+            curl -fsSL https://rpm.nodesource.com/setup_18.x | sudo bash -
+            yum install -y nodejs
+            wget https://aws-codedeploy-us-east-1.s3.us-east-1.amazonaws.com/latest/install
             chmod +x ./install
             ./install auto
+            cd /var
+            mkdir nodeapp
+        IamInstanceProfile:
+          Arn: !GetAtt EC2InstanceProfile.Arn
+    DependsOn: EC2InstanceProfile
 
-  AutoScaleGroup:
-    Type: AWS::AutoScaling::AutoScalingGroup
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
     Properties:
-      LaunchConfigurationName: !Ref EC2LaunchConfiguration
-      AvailabilityZones:
-        Fn::GetAZs: "us-east-1"
-      MinSize: "2"
-      MaxSize: "2"
-      LoadBalancerNames:
-        - !Ref LoadBalancer
-      Tags:
-        -
-          Key: name
-          Value: !Join [ '-' , [ !Ref GitHubRepoName, !Ref GitHubBranch ] ]
-          PropagateAtLaunch: true
+      GroupDescription: Security group for instances
+      VpcId: !Ref MyVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
 
   LoadBalancer:
-    Type: AWS::ElasticLoadBalancing::LoadBalancer
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
-      AvailabilityZones:
-        Fn::GetAZs: "us-east-1"
+      Name: MyLoadBalancer
+      Scheme: internet-facing
+      Subnets:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
       SecurityGroups:
-      - !GetAtt InstanceSecurityGroup.GroupId
-      Listeners:
-      - LoadBalancerPort: '80'
-        InstancePort: '80'
-        Protocol: HTTP
-      HealthCheck:
-        HealthyThreshold: 2
-        Interval: 30
-        Target: HTTP:80/
-        Timeout: 5
-        UnhealthyThreshold: 5
+        - !Ref LoadBalancerSecurityGroup
+      Tags:
+        - Key: Name
+          Value: MyLoadBalancer
+    DependsOn:
+      - InternetGateway
+      - AttachGateway
+      - MyVPC
+
+  LoadBalancerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Load Balancer
+      VpcId: !Ref MyVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: MyTargetGroup
+      Port: 80
+      Protocol: HTTP
+      TargetType: instance
+      VpcId: !Ref MyVPC
+
+  LoadBalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 80
+      Protocol: HTTP
+
+  AutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: MyAutoScalingGroup
+      LaunchTemplate:
+        LaunchTemplateId: !Ref WebServerLaunchTemplate
+        Version: !GetAtt WebServerLaunchTemplate.LatestVersionNumber
+      MinSize: 2
+      MaxSize: 2
+      DesiredCapacity: 2
+      VPCZoneIdentifier:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      TargetGroupARNs:
+        - !Ref TargetGroup
+      Tags:
+        -
+          Key: Name
+          Value: !Join [ '-' , [ !Ref GitHubRepoName, !Ref GitHubBranch ] ]
+          PropagateAtLaunch: true
 
   CodeDeployTrustRole:
     Type: AWS::IAM::Role
@@ -176,7 +298,7 @@ Resources:
       DeploymentConfigName: CodeDeployDefault.AllAtOnce
       DeploymentGroupName: !Join [ '-' , [ !Ref GitHubRepoName, !Ref GitHubBranch ] ]
       Ec2TagFilters:
-        - Key: name
+        - Key: Name
           Value: !Join [ '-' , [ !Ref GitHubRepoName, !Ref GitHubBranch ] ]
           Type: KEY_AND_VALUE
       ServiceRoleArn: !GetAtt [CodeDeployTrustRole, Arn]

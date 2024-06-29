@@ -83,11 +83,10 @@ Resources:
             build:
               commands:
                 - npm test
-      TimeoutInMinutes: 10
       Environment:
-        Type: LINUX_CONTAINER
-        ComputeType: BUILD_GENERAL1_LARGE
-        Image: aws/codebuild/nodejs:6.3.1
+        Type: LINUX_LAMBDA_CONTAINER
+        ComputeType: BUILD_LAMBDA_1GB
+        Image: aws/codebuild/amazonlinux-x86_64-lambda-standard:nodejs20	
 
   CodeBuildProject:
     Type: AWS::CodeBuild::Project
@@ -99,11 +98,10 @@ Resources:
         Type: CODEPIPELINE
         Packaging: NONE
       Environment:
-        Type: LINUX_CONTAINER
+        Type: LINUX_LAMBDA_CONTAINER
         # ComputeType options: BUILD_GENERAL1_SMALL, BUILD_GENERAL1_MEDIUM, BUILD_GENERAL1_LARGE
-        ComputeType: BUILD_GENERAL1_SMALL
+        ComputeType: BUILD_LAMBDA_1GB
         # Run `aws codebuild list-curated-environment-images` for a complete list of images provided.
-        Image: aws/codebuild/nodejs:7.0.0
+        Image: aws/codebuild/amazonlinux-x86_64-lambda-standard:nodejs20	
       Source:
         Type: CODEPIPELINE
-      TimeoutInMinutes: 10
