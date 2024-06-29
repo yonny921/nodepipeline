@@ -10,7 +10,8 @@
     "cloudformation": "bash ./scripts/create-stacks.sh",
     "cloudformation-build": "aws cloudformation create-stack --stack-name node-app-codebuild-resources --template-body file://cloudformation-templates/code-build.yml --capabilities CAPABILITY_IAM --parameters file://cloudformation-templates/parameters.json",
     "cloudformation-deploy": "aws cloudformation create-stack --stack-name node-app-codedeploy-resources --template-body file://cloudformation-templates/code-deploy.yml --capabilities CAPABILITY_IAM --parameters file://cloudformation-templates/parameters.json",
-    "cloudformation-pipeline": "aws cloudformation create-stack --stack-name node-pipeline-stack --template-body file://cloudformation-templates/codepipeline.yml --capabilities CAPABILITY_IAM --parameters file://cloudformation-templates/parameters.json"
+    "cloudformation-pipeline": "aws cloudformation create-stack --stack-name node-pipeline-stack --template-body file://cloudformation-templates/codepipeline.yml --capabilities CAPABILITY_IAM --parameters file://cloudformation-templates/parameters.json",
+    "cloudformation-deploy-update": "aws cloudformation update-stack --stack-name node-app-codedeploy-resources --template-body file://cloudformation-templates/code-deploy.yml --capabilities CAPABILITY_IAM --parameters file://cloudformation-templates/parameters.json"
   },
   "keywords": [],
   "author": "",
