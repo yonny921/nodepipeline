@@ -31,7 +31,7 @@ Resources:
   MyVPC:
     Type: AWS::EC2::VPC
     Properties:
-      CidrBlock: 10.0.0.0/16
+      CidrBlock: 10.2.0.0/24
       EnableDnsSupport: true
       EnableDnsHostnames: true
       Tags:
@@ -42,7 +42,7 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref MyVPC
-      CidrBlock: 10.0.1.0/24
+      CidrBlock: 10.2.0.0/27
       AvailabilityZone: !Select [ 0, !GetAZs '' ]
       MapPublicIpOnLaunch: true
       Tags:
@@ -53,12 +53,34 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref MyVPC
-      CidrBlock: 10.0.2.0/24
+      CidrBlock: 10.2.0.32/27
       AvailabilityZone: !Select [ 1, !GetAZs '' ]
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
           Value: PublicSubnet2
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MyVPC
+      CidrBlock: 10.2.0.64/27
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: PrivateSubnet1
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MyVPC
+      CidrBlock: 10.2.0.96/27
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: PrivateSubnet2
 
   InternetGateway:
     Type: AWS::EC2::InternetGateway
@@ -66,6 +88,15 @@ Resources:
       Tags:
         - Key: Name
           Value: InternetGateway
+
+  NatEIP1:
+    Type: AWS::EC2::EIP
+  
+  NatGateway1:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatEIP1.AllocationId
+      SubnetId: !Ref PrivateSubnet1
 
   AttachGateway:
     Type: AWS::EC2::VPCGatewayAttachment
@@ -83,6 +114,14 @@ Resources:
           Value: PublicRouteTable1
     DependsOn: MyVPC
   
+  PrivateRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref MyVPC
+      Tags:
+        - Key: Name
+          Value: PrivateRouteTable1
+    DependsOn: MyVPC
 
   PublicRoute1ToInternet:
     Type: AWS::EC2::Route
@@ -91,6 +130,14 @@ Resources:
       RouteTableId: !Ref PublicRouteTable1
       DestinationCidrBlock: 0.0.0.0/0
       GatewayId: !Ref InternetGateway
+
+  PrivateRouteNat1:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: "0.0.0.0/0"
+      NatGatewayId: !Ref NatGateway1
 
   Subnet1RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
@@ -103,6 +150,18 @@ Resources:
     Properties:
       SubnetId: !Ref PublicSubnet2
       RouteTableId: !Ref PublicRouteTable1
+    
+  Subnet1privRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable1
+
+  Subnet2privRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable1
 
   EC2InstanceRole:
     Type: "AWS::IAM::Role"
@@ -240,8 +299,8 @@ Resources:
       MaxSize: 2
       DesiredCapacity: 2
       VPCZoneIdentifier:
-        - !Ref PublicSubnet1
-        - !Ref PublicSubnet2
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
       TargetGroupARNs:
         - !Ref TargetGroup
       Tags:
