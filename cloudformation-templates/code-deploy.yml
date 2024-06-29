@@ -96,7 +96,7 @@ Resources:
     Type: AWS::EC2::NatGateway
     Properties:
       AllocationId: !GetAtt NatEIP1.AllocationId
-      SubnetId: !Ref PrivateSubnet1
+      SubnetId: !Ref PublicSubnet1
 
   AttachGateway:
     Type: AWS::EC2::VPCGatewayAttachment
