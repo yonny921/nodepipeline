@@ -295,7 +295,7 @@ Resources:
     DependsOn: DeployApplication
     Properties:
       ApplicationName: !Ref DeployApplication
-      DeploymentConfigName: CodeDeployDefault.AllAtOnce
+      DeploymentConfigName: CodeDeployDefault.HalfAtATime
       DeploymentGroupName: !Join [ '-' , [ !Ref GitHubRepoName, !Ref GitHubBranch ] ]
       Ec2TagFilters:
         - Key: Name
