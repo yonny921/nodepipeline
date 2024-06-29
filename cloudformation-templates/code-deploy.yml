@@ -351,15 +351,28 @@ Resources:
 
   DeploymentGroup:
     Type: AWS::CodeDeploy::DeploymentGroup
-    DependsOn: DeployApplication
+    DependsOn: 
+      - DeployApplication
+      - TargetGroup
     Properties:
       ApplicationName: !Ref DeployApplication
       DeploymentConfigName: CodeDeployDefault.HalfAtATime
+      DeploymentStyle:
+        DeploymentType: IN_PLACE
+        DeploymentOption: WITH_TRAFFIC_CONTROL
       DeploymentGroupName: !Join [ '-' , [ !Ref GitHubRepoName, !Ref GitHubBranch ] ]
+      LoadBalancerInfo: 
+        TargetGroupInfoList: 
+          - Name: !GetAtt [TargetGroup, TargetGroupName]
       Ec2TagFilters:
         - Key: Name
           Value: !Join [ '-' , [ !Ref GitHubRepoName, !Ref GitHubBranch ] ]
           Type: KEY_AND_VALUE
+      AutoRollbackConfiguration:
+        Enabled: true
+        Events:
+          - DEPLOYMENT_FAILURE
+          - DEPLOYMENT_STOP_ON_REQUEST
       ServiceRoleArn: !GetAtt [CodeDeployTrustRole, Arn]
 
 Outputs:
